@@ -117,68 +117,66 @@ ax.set_title(
 )
 st.pyplot(fig)
 
-# =========================================================================
-# 🗺️ INTERACTIVE MAP (Plotly + Clickable)
-# =========================================================================
-from streamlit_plotly_events import plotly_events
-import plotly.express as px
+from streamlit_folium import st_folium
+import folium
+import json
 
-geoids = filtered_df["GEOID"].astype(str).unique()
-plot_df = tracts_gdf[tracts_gdf["GEOID"].isin(geoids)].merge(
+# =========================================================================
+# 🗺️ INTERACTIVE FOLIUM MAP
+# =========================================================================
+st.subheader("🗺️ Interactive Access Score Map (Clickable)")
+
+# Convert geometry to GeoJSON
+plot_df_geojson = json.loads(tracts_gdf.to_json())
+
+# Create base map
+m = folium.Map(location=[35.6, -79.5], zoom_start=7, tiles="cartodbpositron")
+
+# Merge data for display
+plot_df = tracts_gdf.merge(
     filtered_df[["GEOID", "Access_Score", "County", "Top_Agencies"]],
     on="GEOID", how="left"
 )
 plot_df["Access_Score"] = plot_df["Access_Score"].fillna(0.0)
 plot_df["County"] = plot_df["County"].fillna("Unknown")
 
-fig = px.choropleth_mapbox(
-    plot_df,
-    geojson=json.loads(plot_df.to_json()),
-    locations="GEOID",
-    color="Access_Score",
-    hover_name="County",
-    hover_data={"GEOID": True, "Access_Score": True},
-    color_continuous_scale=cmap_choice,
-    range_color=(0, plot_df["Access_Score"].max()),
-    mapbox_style="carto-positron",
-    zoom=6,
-    center={"lat": 35.6, "lon": -79.5},
-    opacity=0.7,
-)
-fig.update_layout(
-    margin={"r":0,"t":40,"l":0,"b":0},
-    title=f"Access Score — {title_suffix}<br>Urban={urban_sel} | Rural={rural_sel}",
-)
+# Add choropleth
+folium.Choropleth(
+    geo_data=plot_df_geojson,
+    data=plot_df,
+    columns=["GEOID", "Access_Score"],
+    key_on="feature.properties.GEOID",
+    fill_color="YlGn",
+    fill_opacity=0.7,
+    line_opacity=0.2,
+    legend_name="Access Score",
+).add_to(m)
 
-# --- Capture clicks using streamlit-plotly-events ---
-selected_points = plotly_events(fig, click_event=True, hover_event=False, select_event=False, override_height=650)
+# Add click popup
+for _, row in plot_df.iterrows():
+    popup_text = f"<b>GEOID:</b> {row['GEOID']}<br><b>County:</b> {row['County']}<br>"
+    try:
+        top_agencies = json.loads(row["Top_Agencies"]) if isinstance(row["Top_Agencies"], str) else row["Top_Agencies"]
+        if top_agencies:
+            popup_text += "<b>Top Agencies:</b><ul>"
+            for ag in top_agencies:
+                popup_text += f"<li>{ag['Name']} ({ag['Agency_Contribution']:.2f})</li>"
+            popup_text += "</ul>"
+    except Exception:
+        popup_text += "<i>No agency data.</i>"
+    folium.Popup(popup_text, max_width=300).add_to(
+        folium.GeoJson(row["geometry"], style_function=lambda x: {"fillOpacity": 0})
+    )
+
+# Render interactive map
+map_output = st_folium(m, width=800, height=600)
 
 # =========================================================================
-# 🏢 DISPLAY TOP AGENCIES ON CLICK
+# 🏢 SELECTED TRACT INFO
 # =========================================================================
-st.subheader("🏢 Top Agencies for Selected Tract")
-
-if selected_points:
-    clicked_geoid = selected_points[0].get("location")
-    st.info(f"Selected GEOID: {clicked_geoid}")
-
-    if "Top_Agencies" in filtered_df.columns and clicked_geoid in filtered_df["GEOID"].values:
-        try:
-            top_json = filtered_df.loc[filtered_df["GEOID"] == clicked_geoid, "Top_Agencies"].values[0]
-            if isinstance(top_json, str):
-                agencies = json.loads(top_json)
-            else:
-                agencies = top_json
-        except Exception:
-            agencies = []
-        
-        if agencies:
-            df_ag = pd.DataFrame(agencies)
-            df_ag["Agency_Contribution"] = df_ag["Agency_Contribution"].round(3)
-            st.dataframe(df_ag, use_container_width=True)
-        else:
-            st.warning("No agency data available for this GEOID.")
-else:
-    st.caption("Click a tract on the map to see its top contributing agencies.")
+if map_output and map_output.get("last_active_drawing"):
+    geoid_clicked = map_output["last_active_drawing"]["properties"].get("GEOID")
+    if geoid_clicked:
+        st.success(f"Selected GEOID: {geoid_clicked}")
 
 
