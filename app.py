@@ -171,12 +171,51 @@ for _, row in plot_df.iterrows():
 # Render interactive map
 map_output = st_folium(m, width=800, height=600)
 
+
+
 # =========================================================================
-# 🏢 SELECTED TRACT INFO
+# 🏢 CLICKED TRACT DETAILS — SHOW TOP AGENCIES
 # =========================================================================
 if map_output and map_output.get("last_active_drawing"):
     geoid_clicked = map_output["last_active_drawing"]["properties"].get("GEOID")
+
     if geoid_clicked:
         st.success(f"Selected GEOID: {geoid_clicked}")
 
+        # 🔍 Find corresponding top agencies
+        try:
+            top_json = filtered_df.loc[
+                filtered_df["GEOID"].astype(str) == str(geoid_clicked), "Top_Agencies"
+            ].values[0]
+
+            agencies = (
+                json.loads(top_json)
+                if isinstance(top_json, str)
+                else top_json
+            )
+        except Exception:
+            agencies = []
+
+        # 🏢 Display results
+        if agencies and isinstance(agencies, list):
+            st.write("**Top Agencies Contributing to Access Score:**")
+            df_ag = pd.DataFrame(agencies)
+            df_ag["Agency_Contribution"] = df_ag["Agency_Contribution"].round(3)
+            st.dataframe(df_ag, use_container_width=True)
+        else:
+            st.warning("No agency contribution data available for this GEOID.")
+
+# =========================================================================
+# 📊 SUMMARY + TOP/BOTTOM TRACTS
+# =========================================================================
+st.subheader("📊 Summary Statistics")
+summary = filtered_df["Access_Score"].describe().to_frame().T
+st.dataframe(summary)
+
+st.subheader("🏆 Top and Bottom Tracts by Access Score")
+col1, col2 = st.columns(2)
+col1.write("**Top 10 Tracts**")
+col1.dataframe(filtered_df.nlargest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
+col2.write("**Bottom 10 Tracts**")
+col2.dataframe(filtered_df.nsmallest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
 
