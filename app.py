@@ -132,34 +132,66 @@ col2.write("**Bottom 10 Tracts**")
 col2.dataframe(filtered_df.nsmallest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
 
 # =========================================================================
-# 🏢 TOP AGENCIES FOR SELECTED TRACT
+# 🗺️ INTERACTIVE MAP (Plotly)
 # =========================================================================
-if "Top_Agencies" in filtered_df.columns:
-    st.subheader("🏢 Top Agencies for Selected Tracts")
-    st.markdown(
-        "Each GEOID below shows its top contributing agencies and their relative access contributions."
-    )
+import plotly.express as px
 
-    # Safely parse JSON-like strings
-    def parse_agencies(x):
+geoids = filtered_df["GEOID"].astype(str).unique()
+plot_df = tracts_gdf[tracts_gdf["GEOID"].isin(geoids)].merge(
+    filtered_df[["GEOID", "Access_Score", "County", "Top_Agencies"]],
+    on="GEOID", how="left"
+)
+plot_df["Access_Score"] = plot_df["Access_Score"].fillna(0.0)
+plot_df["County"] = plot_df["County"].fillna("Unknown")
+
+# --- create Plotly figure ---
+fig = px.choropleth_mapbox(
+    plot_df,
+    geojson=json.loads(plot_df.to_json()),
+    locations="GEOID",
+    color="Access_Score",
+    hover_name="County",
+    hover_data={"GEOID": True, "Access_Score": True},
+    color_continuous_scale=cmap_choice,
+    range_color=(0, plot_df["Access_Score"].max()),
+    mapbox_style="carto-positron",
+    zoom=6,
+    center={"lat": 35.6, "lon": -79.5},
+    opacity=0.7,
+)
+fig.update_layout(
+    margin={"r":0,"t":40,"l":0,"b":0},
+    title=f"Access Score — {title_suffix}<br>Urban={urban_sel} | Rural={rural_sel}",
+)
+
+# --- capture click event ---
+selected = st.plotly_chart(fig, use_container_width=True, on_click="geo")
+
+# =========================================================================
+# 🏢 DISPLAY TOP AGENCIES ON CLICK
+# =========================================================================
+st.subheader("🏢 Top Agencies for Selected Tract")
+
+if selected and "points" in selected and len(selected["points"]) > 0:
+    clicked_geoid = selected["points"][0]["location"]
+    st.info(f"Selected GEOID: {clicked_geoid}")
+
+    if "Top_Agencies" in filtered_df.columns:
         try:
-            if isinstance(x, str):
-                return json.loads(x)
-            elif isinstance(x, list):
-                return x
+            top_json = filtered_df.loc[filtered_df["GEOID"] == clicked_geoid, "Top_Agencies"].values[0]
+            if isinstance(top_json, str):
+                agencies = json.loads(top_json)
+            else:
+                agencies = top_json
         except Exception:
-            return []
-        return []
-
-    filtered_df["Top_Agencies"] = filtered_df["Top_Agencies"].apply(parse_agencies)
-
-    for _, row in filtered_df.nlargest(10, "Access_Score").iterrows():
-        st.markdown(f"**GEOID:** `{row['GEOID']}` — **County:** {row['County']}")
-        agencies = row["Top_Agencies"]
+            agencies = []
+        
         if agencies:
             df_ag = pd.DataFrame(agencies)
             df_ag["Agency_Contribution"] = df_ag["Agency_Contribution"].round(3)
             st.dataframe(df_ag, use_container_width=True)
         else:
-            st.info("No agency data available for this GEOID.")
-        st.markdown("---")
+            st.warning("No agency data available for this GEOID.")
+else:
+    st.caption("Click a tract on the map to see its top contributing agencies.")
+
