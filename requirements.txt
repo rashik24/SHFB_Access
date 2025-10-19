@@ -1,0 +1,23 @@
+# --- Core ---
+streamlit>=1.38.0
+pandas>=2.1.0
+numpy>=1.25.0
+
+# --- Geospatial ---
+geopandas>=0.14.0
+shapely>=2.0.1
+pyogrio>=0.7.2
+
+# --- Visualization ---
+matplotlib>=3.8.0
+plotly>=5.24.0
+streamlit-plotly-events>=0.0.6
+
+# --- File I/O ---
+pyarrow>=14.0.1  # for Parquet
+openpyxl>=3.1.2  # for Excel
+fiona>=1.9.4
+
+# --- Utilities ---
+json5
+requests
