@@ -118,22 +118,9 @@ ax.set_title(
 st.pyplot(fig)
 
 # =========================================================================
-# 📊 SUMMARY + TOP/BOTTOM TRACTS
+# 🗺️ INTERACTIVE MAP (Plotly + Clickable)
 # =========================================================================
-st.subheader("📊 Summary Statistics")
-summary = filtered_df["Access_Score"].describe().to_frame().T
-st.dataframe(summary)
-
-st.subheader("🏆 Top and Bottom Tracts by Access Score")
-col1, col2 = st.columns(2)
-col1.write("**Top 10 Tracts**")
-col1.dataframe(filtered_df.nlargest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
-col2.write("**Bottom 10 Tracts**")
-col2.dataframe(filtered_df.nsmallest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
-
-# =========================================================================
-# 🗺️ INTERACTIVE MAP (Plotly)
-# =========================================================================
+from streamlit_plotly_events import plotly_events
 import plotly.express as px
 
 geoids = filtered_df["GEOID"].astype(str).unique()
@@ -144,7 +131,6 @@ plot_df = tracts_gdf[tracts_gdf["GEOID"].isin(geoids)].merge(
 plot_df["Access_Score"] = plot_df["Access_Score"].fillna(0.0)
 plot_df["County"] = plot_df["County"].fillna("Unknown")
 
-# --- create Plotly figure ---
 fig = px.choropleth_mapbox(
     plot_df,
     geojson=json.loads(plot_df.to_json()),
@@ -164,19 +150,19 @@ fig.update_layout(
     title=f"Access Score — {title_suffix}<br>Urban={urban_sel} | Rural={rural_sel}",
 )
 
-# --- capture click event ---
-selected = st.plotly_chart(fig, use_container_width=True, on_click="geo")
+# --- Capture clicks using streamlit-plotly-events ---
+selected_points = plotly_events(fig, click_event=True, hover_event=False, select_event=False, override_height=650)
 
 # =========================================================================
 # 🏢 DISPLAY TOP AGENCIES ON CLICK
 # =========================================================================
 st.subheader("🏢 Top Agencies for Selected Tract")
 
-if selected and "points" in selected and len(selected["points"]) > 0:
-    clicked_geoid = selected["points"][0]["location"]
+if selected_points:
+    clicked_geoid = selected_points[0].get("location")
     st.info(f"Selected GEOID: {clicked_geoid}")
 
-    if "Top_Agencies" in filtered_df.columns:
+    if "Top_Agencies" in filtered_df.columns and clicked_geoid in filtered_df["GEOID"].values:
         try:
             top_json = filtered_df.loc[filtered_df["GEOID"] == clicked_geoid, "Top_Agencies"].values[0]
             if isinstance(top_json, str):
@@ -194,4 +180,5 @@ if selected and "points" in selected and len(selected["points"]) > 0:
             st.warning("No agency data available for this GEOID.")
 else:
     st.caption("Click a tract on the map to see its top contributing agencies.")
+
 
