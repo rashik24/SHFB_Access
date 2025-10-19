@@ -21,3 +21,6 @@ fiona>=1.9.4
 # --- Utilities ---
 json5
 requests
+
+folium>=0.16.0
+streamlit-folium>=0.21.0
