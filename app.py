@@ -130,3 +130,36 @@ col1.write("**Top 10 Tracts**")
 col1.dataframe(filtered_df.nlargest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
 col2.write("**Bottom 10 Tracts**")
 col2.dataframe(filtered_df.nsmallest(10, "Access_Score")[["GEOID", "County", "Access_Score"]].reset_index(drop=True))
+
+# =========================================================================
+# 🏢 TOP AGENCIES FOR SELECTED TRACT
+# =========================================================================
+if "Top_Agencies" in filtered_df.columns:
+    st.subheader("🏢 Top Agencies for Selected Tracts")
+    st.markdown(
+        "Each GEOID below shows its top contributing agencies and their relative access contributions."
+    )
+
+    # Safely parse JSON-like strings
+    def parse_agencies(x):
+        try:
+            if isinstance(x, str):
+                return json.loads(x)
+            elif isinstance(x, list):
+                return x
+        except Exception:
+            return []
+        return []
+
+    filtered_df["Top_Agencies"] = filtered_df["Top_Agencies"].apply(parse_agencies)
+
+    for _, row in filtered_df.nlargest(10, "Access_Score").iterrows():
+        st.markdown(f"**GEOID:** `{row['GEOID']}` — **County:** {row['County']}")
+        agencies = row["Top_Agencies"]
+        if agencies:
+            df_ag = pd.DataFrame(agencies)
+            df_ag["Agency_Contribution"] = df_ag["Agency_Contribution"].round(3)
+            st.dataframe(df_ag, use_container_width=True)
+        else:
+            st.info("No agency data available for this GEOID.")
+        st.markdown("---")
